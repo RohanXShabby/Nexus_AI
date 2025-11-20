@@ -28,7 +28,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
             {isUser ? 'You' : 'Nexus AI'}
           </span>
           <span className="text-[10px] text-zinc-700 opacity-0 group-hover:opacity-100 transition-opacity">
-            {new Date(message.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            {new Date(message.timestamp).toLocaleTimeString([], {hour: 'numeric', minute:'2-digit', hour12: true})}
           </span>
         </div>
         
