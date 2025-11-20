@@ -1,0 +1,5 @@
+{
+  "name": "Nexus AI Workspace",
+  "description": "A persistent chat application with context retention and local storage management.",
+  "requestFramePermissions": []
+}
