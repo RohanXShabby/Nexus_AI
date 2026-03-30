@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Chat } from "@google/genai";
 import { v4 as uuidv4 } from 'uuid';
 import { Conversation, Message, Role } from '../types';
 import { createChatSession, sendMessageToGemini, generateTitle } from '../services/geminiService';
@@ -13,13 +12,20 @@ interface ChatAreaProps {
 export const ChatArea: React.FC<ChatAreaProps> = ({ conversation, onUpdateMessages }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [chatSession, setChatSession] = useState<Chat | null>(null);
+  const [chatSession, setChatSession] = useState<any>(null); // Using any to avoid type conflicts with the new SDK
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Check if the last message was an error
+  const lastMessageIsError = conversation.messages.length > 0 && conversation.messages[conversation.messages.length - 1].isError;
+
   useEffect(() => {
-    const session = createChatSession(conversation.messages);
-    setChatSession(session);
+    try {
+        const session = createChatSession(conversation.messages);
+        setChatSession(session);
+    } catch (e) {
+        console.error("Failed to create chat session", e);
+    }
     
     if (textareaRef.current) {
       textareaRef.current.focus();
@@ -39,7 +45,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ conversation, onUpdateMessag
   }, [input]);
 
   const handleSend = async () => {
-    if (!input.trim() || !chatSession || isLoading) return;
+    if (!input.trim() || !chatSession || isLoading || lastMessageIsError) return;
 
     const userText = input.trim();
     setInput('');
@@ -73,11 +79,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ conversation, onUpdateMessag
 
       onUpdateMessages([...newMessages, modelMsg], newTitle);
 
-    } catch (error) {
+    } catch (error: any) {
       const errorMsg: Message = {
         id: uuidv4(),
         role: Role.Model,
-        text: "Connection to Nexus core failed. Please check your configuration.",
+        text: error.message || "Connection to Nexus core failed. Please check your configuration.",
         timestamp: Date.now(),
         isError: true
       };
@@ -130,22 +136,26 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ conversation, onUpdateMessag
 
       {/* Input Area */}
       <div className="p-6 bg-black bg-gradient-to-t from-black to-transparent">
-        <div className="max-w-3xl mx-auto relative bg-zinc-900/50 backdrop-blur-sm rounded-2xl border border-zinc-800 shadow-2xl focus-within:border-orange-500/50 focus-within:ring-1 focus-within:ring-orange-500/20 transition-all">
+        <div className={`max-w-3xl mx-auto relative rounded-2xl border transition-all ${
+          lastMessageIsError 
+            ? 'bg-red-900/10 border-red-900/50' 
+            : 'bg-zinc-900/50 backdrop-blur-sm border-zinc-800 focus-within:border-orange-500/50 focus-within:ring-1 focus-within:ring-orange-500/20'
+        }`}>
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Input command or query..."
+            placeholder={lastMessageIsError ? "Please resolve the error to continue..." : "Input command or query..."}
             rows={1}
             className="w-full bg-transparent text-zinc-100 placeholder-zinc-600 text-[15px] p-4 pr-14 rounded-2xl focus:outline-none resize-none max-h-48 overflow-y-auto leading-relaxed"
-            disabled={isLoading}
+            disabled={isLoading || !!lastMessageIsError}
           />
           <button
             onClick={handleSend}
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim() || isLoading || !!lastMessageIsError}
             className={`absolute right-2 bottom-2 p-2 rounded-xl transition-all duration-200 flex items-center justify-center h-9 w-9 ${
-              input.trim() && !isLoading
+              input.trim() && !isLoading && !lastMessageIsError
                 ? 'bg-orange-600 text-white hover:bg-orange-500 shadow-lg shadow-orange-500/20'
                 : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
             }`}
@@ -153,6 +163,22 @@ export const ChatArea: React.FC<ChatAreaProps> = ({ conversation, onUpdateMessag
             <i className="fas fa-arrow-up text-xs"></i>
           </button>
         </div>
+        
+        {lastMessageIsError && (
+          <div className="max-w-3xl mx-auto mt-2 flex justify-center">
+            <button 
+              onClick={() => {
+                // Remove the error message to allow retry
+                onUpdateMessages(conversation.messages.filter(m => !m.isError));
+              }}
+              className="text-[10px] text-red-500 hover:text-red-400 font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors"
+            >
+              <i className="fas fa-rotate-right text-[8px]"></i>
+              Reset Session State
+            </button>
+          </div>
+        )}
+
         <div className="text-center text-[10px] text-zinc-700 mt-3 font-medium">
           Nexus AI generated content may be inaccurate.
         </div>
